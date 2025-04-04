@@ -33,25 +33,32 @@ def wyznaczanie_obserwacji_odstających(chmura_punktow, liczba_sasiadow=30, std_
 #Downsampling chmur punktów
 def regularyzacja_chmur_punktow(chmura_punktów, odleglosc_pomiedzy_wokselami = 0.1):
     chmura_punktów_woksele = chmura_punktów.voxel_down_sample(voxel_size=odleglosc_pomiedzy_wokselami)
-    print(f"Wyświetlanie chmury punktów w regularnej siatce wokseli - odległość pomiedzy wokselami: {odleglosc_pomiedzy_wokselami}")
     return chmura_punktów_woksele
 
+def usuwanie_co_n_tego_punktu_z_chmury_punktów(chmura_punktów ,co_n_ty_punkt = 2):
+    chmura_punktów_co_n_ty = chmura_punktów.uniform_down_sample(every_k_points=co_n_ty_punkt)
+    return chmura_punktów_co_n_ty
 
-files_path = './DaneProjekt/skany_las'
-chmura_suma = o3d.geometry.PointCloud()
-oberwacje_odstające = o3d.geometry.PointCloud()
-for file in os.listdir(files_path):
-    if file.endswith('.las'):
-        chmura = wczytanie_chmury_punktow_las_konwwersj_do_o3d(os.path.join(files_path, file))
-        chmura_punktow_odfiltrowana, punkty_odstające = wyznaczanie_obserwacji_odstających(chmura)
-        chmura_suma += chmura_punktow_odfiltrowana
-        oberwacje_odstające += punkty_odstające
 
-f = './DaneProjekt/dim_dense_cloud.las'
+# files_path = './DaneProjekt/skany_las'
+# chmura_suma = o3d.geometry.PointCloud()
+# oberwacje_odstające = o3d.geometry.PointCloud()
+# for file in os.listdir(files_path):
+#     if file.endswith('.las'):
+#         chmura = wczytanie_chmury_punktow_las_konwwersj_do_o3d(os.path.join(files_path, file))
+#         chmura_punktow_odfiltrowana, punkty_odstające = wyznaczanie_obserwacji_odstających(chmura)
+#         chmura_suma += chmura_punktow_odfiltrowana
+#         oberwacje_odstające += punkty_odstające
+
+f = 'DaneProjekt/dim_dense_cloud.laz'
 chmura = wczytanie_chmury_punktow_las_konwwersj_do_o3d(f)
-chmura_punktow_odfiltrowana, punkty_odstające = wyznaczanie_obserwacji_odstających(chmura)
-chmura_suma += chmura_punktow_odfiltrowana
-oberwacje_odstające += punkty_odstające
+# chmura = o3d.io.read_point_cloud(f)
+chmura = usuwanie_co_n_tego_punktu_z_chmury_punktów(chmura)
+# chmura_punktow_odfiltrowana, punkty_odstające = wyznaczanie_obserwacji_odstających(chmura)
+# chmura_suma = chmura_punktow_odfiltrowana
+# oberwacje_odstające = punkty_odstające
+chmura_suma = chmura
+oberwacje_odstające = chmura
 
 # save to odstajace.laz and odfiltrowane.laz
 o3d.io.write_point_cloud('odstajace.pcd', oberwacje_odstające)
