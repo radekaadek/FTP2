@@ -5,8 +5,6 @@ import os
 import click
 from pathlib import Path
 
-# --- Funkcje pomocnicze (bez zmian w stosunku do poprzedniej wersji) ---
-
 def wczytanie_chmury_punktow_las_konwersja_do_o3d(plik: Path) -> o3d.geometry.PointCloud:
     """
     Wczytuje chmurę punktów z pliku LAS/LAZ i konwertuje ją do formatu Open3D.
@@ -24,17 +22,14 @@ def wczytanie_chmury_punktow_las_konwersja_do_o3d(plik: Path) -> o3d.geometry.Po
         if hasattr(las_pcd, 'red') and hasattr(las_pcd, 'green') and hasattr(las_pcd, 'blue'):
             max_val = np.iinfo(las_pcd.red.dtype).max if np.issubdtype(las_pcd.red.dtype, np.integer) else 1.0
             if max_val == 0: max_val = 1.0
-            # Sprawdźmy czy wartości nie są już w zakresie 0-1 (rzadkie, ale możliwe)
             if np.max(las_pcd.red) <= 1.0 and np.max(las_pcd.green) <= 1.0 and np.max(las_pcd.blue) <= 1.0:
                  r, g, b = las_pcd.red, las_pcd.green, las_pcd.blue
             else:
-                 # Normalizacja z uint16 (lub innego typu int) do 0-1 float
                  r = las_pcd.red / max_val
                  g = las_pcd.green / max_val
                  b = las_pcd.blue / max_val
 
             colors = np.vstack((r, g, b)).transpose()
-            # Upewnij się, że kolory są w zakresie [0, 1]
             colors = np.clip(colors, 0.0, 1.0)
             chmura_punktow.colors = o3d.utility.Vector3dVector(colors)
         else:
@@ -43,7 +38,6 @@ def wczytanie_chmury_punktow_las_konwersja_do_o3d(plik: Path) -> o3d.geometry.Po
         return chmura_punktow
 
     except Exception as e:
-        # Zgłoś błąd dalej, aby można było go złapać w głównej pętli
         raise Exception(f"Błąd podczas wczytywania pliku {plik}: {e}")
 
 
@@ -92,8 +86,6 @@ def usuwanie_co_n_tego_punktu_z_chmury_punktow(chmura_punktow: o3d.geometry.Poin
 
     chmura_punktow_co_n_ty = chmura_punktow.uniform_down_sample(every_k_points=co_n_ty_punkt)
     return chmura_punktow_co_n_ty
-
-# --- Główna komenda Click (zmodyfikowana) ---
 
 @click.command()
 @click.argument('input_path', type=click.Path(exists=True, readable=True, path_type=Path))
