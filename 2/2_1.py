@@ -132,14 +132,14 @@ def process_point_clouds_combined(input_path: Path, output_dir: Path, output_bas
             files_to_process.append(input_path)
         else:
             click.echo(f"Błąd: Oczekiwano pliku .las lub .laz, otrzymano: {input_path}", err=True)
-            return 1 # Zwróć kod błędu
+            return 1
     elif input_path.is_dir():
         click.echo(f"Przeszukiwanie katalogu: {input_path.resolve()}")
         for ext in ['*.las', '*.laz']:
             files_to_process.extend(input_path.glob(ext))
         if not files_to_process:
             click.echo(f"Ostrzeżenie: Nie znaleziono plików .las ani .laz w katalogu: {input_path}", err=True)
-            return 0 # Zakończ normalnie, nic do zrobienia
+            return 0
     else:
         click.echo(f"Błąd: Nieprawidłowa ścieżka wejściowa: {input_path}", err=True)
         return 1
@@ -152,9 +152,8 @@ def process_point_clouds_combined(input_path: Path, output_dir: Path, output_bas
     click.echo("Ostrzeżenie: Łączenie wielu dużych plików może wymagać znacznej ilości pamięci RAM.")
 
     combined_cloud = o3d.geometry.PointCloud()
-    has_color = False # Śledź, czy jakakolwiek chmura miała kolor
+    has_color = False
 
-    # --- Krok 1: Wczytanie i połączenie wszystkich chmur ---
     click.echo("\n--- Łączenie chmur punktów ---")
     for i, file_path in enumerate(files_to_process):
         click.echo(f"[{i+1}/{len(files_to_process)}] Wczytywanie: {file_path.name} ...", nl=False)
@@ -170,8 +169,6 @@ def process_point_clouds_combined(input_path: Path, output_dir: Path, output_bas
 
         except Exception as e:
             click.echo(f"\nBłąd podczas wczytywania pliku {file_path.name}: {e}", err=True)
-            # Można zdecydować, czy kontynuować z innymi plikami, czy przerwać
-            # Tutaj kontynuujemy
             click.echo("Kontynuowanie z następnym plikiem...")
 
     if not combined_cloud.has_points():
@@ -180,27 +177,22 @@ def process_point_clouds_combined(input_path: Path, output_dir: Path, output_bas
 
     click.echo(f"\n--- Połączono chmurę: {len(combined_cloud.points)} punktów ---")
     if not has_color and combined_cloud.has_colors():
-         # Jeśli has_color jest False, ale combined_cloud ma kolory (np. domyślne czarne)
-         # Usuńmy je, aby uniknąć mylących danych, jeśli żaden plik wejściowy nie miał kolorów
          combined_cloud.colors = o3d.utility.Vector3dVector()
          click.echo("Usunięto domyślne kolory, ponieważ żaden plik wejściowy ich nie zawierał.")
     elif has_color:
          click.echo("Połączona chmura zawiera informacje o kolorze.")
 
 
-    # --- Krok 2: Przetwarzanie połączonej chmury ---
     click.echo("\n--- Przetwarzanie połączonej chmury ---")
-    processed_cloud = combined_cloud # Pracuj na kopii lub nowej zmiennej
+    processed_cloud = combined_cloud
     outlier_cloud = None
     voxel_cloud = None
 
-    # Opcjonalny jednolity downsampling
     if uniform_downsample:
         click.echo(f"Stosowanie jednolitego downsamplingu (co {uniform_k}-ty punkt)...")
         processed_cloud = usuwanie_co_n_tego_punktu_z_chmury_punktow(processed_cloud, uniform_k)
         click.echo(f" -> Pozostało punktów: {len(processed_cloud.points)}")
 
-    # Opcjonalne usuwanie punktów odstających
     if remove_outliers:
         click.echo(f"Usuwanie punktów odstających (sąsiedzi={outlier_neighbors}, std_ratio={outlier_std_ratio})...")
         processed_cloud, outlier_cloud = wyznaczanie_obserwacji_odstajacych(
@@ -212,11 +204,8 @@ def process_point_clouds_combined(input_path: Path, output_dir: Path, output_bas
         else:
             click.echo(" -> Nie znaleziono punktów odstających.")
 
-    # Opcjonalny downsampling wokselowy
     if voxel_downsample:
         click.echo(f"Stosowanie downsamplingu wokselowego (rozmiar={voxel_size})...")
-        # Jeśli save_voxels jest True, zapiszemy osobną wersję.
-        # Jeśli False, nadpiszemy główną przetworzoną chmurę.
         voxel_result = regularyzacja_chmury_punktow(processed_cloud, voxel_size)
         if save_voxels:
             voxel_cloud = voxel_result
@@ -226,31 +215,25 @@ def process_point_clouds_combined(input_path: Path, output_dir: Path, output_bas
             click.echo(f" -> Pozostało punktów po wokselizacji: {len(processed_cloud.points)}")
 
 
-    # --- Krok 3: Zapis wyników ---
     click.echo("\n--- Zapisywanie wyników ---")
 
-    # Główna przetworzona chmura
     output_processed_path = output_dir / f"{output_basename}_processed.{output_format}"
     click.echo(f"Zapisywanie połączonej i przetworzonej chmury do: {output_processed_path}")
     if not o3d.io.write_point_cloud(str(output_processed_path), processed_cloud, write_ascii=False, compressed=True):
          click.echo(f"Błąd: Nie udało się zapisać pliku {output_processed_path}", err=True)
          return 1
 
-    # Opcjonalnie punkty odstające
     if remove_outliers and save_outliers and outlier_cloud and outlier_cloud.has_points():
         output_outliers_path = output_dir / f"{output_basename}_outliers.{output_format}"
         click.echo(f"Zapisywanie punktów odstających do: {output_outliers_path}")
         if not o3d.io.write_point_cloud(str(output_outliers_path), outlier_cloud, write_ascii=False, compressed=True):
              click.echo(f"Błąd: Nie udało się zapisać pliku {output_outliers_path}", err=True)
-             # Kontynuuj mimo błędu zapisu pliku dodatkowego
 
-    # Opcjonalnie chmura wokseli
     if voxel_downsample and save_voxels and voxel_cloud and voxel_cloud.has_points():
          output_voxels_path = output_dir / f"{output_basename}_voxels.{output_format}"
          click.echo(f"Zapisywanie zwokselizowanej chmury do: {output_voxels_path}")
          if not o3d.io.write_point_cloud(str(output_voxels_path), voxel_cloud, write_ascii=False, compressed=True):
               click.echo(f"Błąd: Nie udało się zapisać pliku {output_voxels_path}", err=True)
-              # Kontynuuj mimo błędu zapisu pliku dodatkowego
 
     click.echo("\n--- Zakończono pomyślnie ---")
     return 0
