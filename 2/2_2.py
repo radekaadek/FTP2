@@ -1,7 +1,6 @@
 import open3d as o3d
 import numpy as np
 import click
-import os
 
 def icp_registration(source, target, threshold, trans_init, method, max_iteration):
     """
@@ -18,12 +17,19 @@ def icp_registration(source, target, threshold, trans_init, method, max_iteratio
     Returns:
         tuple: (transformation_matrix, information_matrix) or (None, None) on failure.
     """
+
+    # Move both clouds to 0,0,0 remember the target previous position
+    source.translate(-source.get_center())
+    target_translation = target.get_center()
+    target.translate(-target_translation)
+
+
     click.echo('\n--- Analiza dokładności wstępnej orientacji ---')
     evaluation = o3d.pipelines.registration.evaluate_registration(
         source, target, threshold, trans_init)
-    click.echo(f"Fitness: {evaluation.fitness:.4f}")
-    click.echo(f"Inlier RMSE: {evaluation.inlier_rmse:.4f}")
-    click.echo(f"Correspondence set size: {len(evaluation.correspondence_set)}")
+    click.echo(f"Fitness: {evaluation.fitness}")
+    click.echo(f"Inlier RMSE: {evaluation.inlier_rmse:}")
+    click.echo(f"Rozmiar correspondence set: {len(evaluation.correspondence_set)}")
 
     conv_criteria = o3d.pipelines.registration.ICPConvergenceCriteria(
         max_iteration=max_iteration)
@@ -77,13 +83,16 @@ def icp_registration(source, target, threshold, trans_init, method, max_iteratio
         click.echo(click.style(f"Nieznana metoda ICP: {method}", fg='red'))
         return None, None
 
+    transformation_matrix = reg_result.transformation
+    transformation_matrix[:3, 3] += target_translation
+
     if reg_result:
         click.echo("\n--- Wyniki Rejestracji ---")
         click.echo(f"Fitness: {reg_result.fitness:.4f}")
         click.echo(f"Inlier RMSE: {reg_result.inlier_rmse:.4f}")
-        click.echo(f"Correspondence set size: {len(reg_result.correspondence_set)}")
+        click.echo(f"Rozmiar correspondence set: {len(reg_result.correspondence_set)}")
         click.echo("\nMacierz transformacji:")
-        click.echo(reg_result.transformation)
+        click.echo(transformation_matrix)
 
         click.echo("\n--- Obliczanie Macierzy Informacji ---")
         try:
@@ -93,10 +102,10 @@ def icp_registration(source, target, threshold, trans_init, method, max_iteratio
                 source_copy_for_info, target, threshold, np.identity(4)
             )
 
-            return reg_result.transformation, information_matrix
+            return transformation_matrix, information_matrix
         except Exception as e:
             click.echo(click.style(f"Nie można obliczyć macierzy informacji: {e}", fg='red'))
-            return reg_result.transformation, None
+            return transformation_matrix, None
     else:
          click.echo(click.style("Rejestracja ICP nie powiodła się.", fg='red'))
          return None, None
@@ -121,12 +130,7 @@ def icp_registration(source, target, threshold, trans_init, method, max_iteratio
               help='ICP correspondence distance threshold.')
 @click.option('--max-iterations', '-i', default=1000, type=click.INT,
               help='Maximum number of ICP iterations.')
-@click.option('--initial-transform-centroid', is_flag=True, default=True,
-              help='Use centroid difference for initial translation (default). Use --no-initial-transform-centroid for identity matrix.')
-@click.option('--no-initial-transform-centroid', is_flag=True, default=False,
-              help='Do not use centroid difference; use identity matrix for initial transform.')
-
-def main(source_file, target_file, output_transform, output_info, output_cloud, method, threshold, max_iterations, initial_transform_centroid, no_initial_transform_centroid):
+def main(source_file, target_file, output_transform, output_info, output_cloud, method, threshold, max_iterations):
     """
     Rejestruje chmurę punktów SOURCE_FILE do TARGET_FILE za pomocą algorytmu ICP.
 
@@ -155,21 +159,6 @@ def main(source_file, target_file, output_transform, output_info, output_cloud, 
         return 1
 
     trans_init = np.identity(4)
-    use_centroid_init = initial_transform_centroid and not no_initial_transform_centroid
-
-    if use_centroid_init:
-        click.echo("Obliczanie wstępnej transformacji na podstawie centroidów...")
-        try:
-            source_centroid = chmura_source.get_center()
-            target_centroid = chmura_target.get_center()
-            trans_init[:3, 3] = target_centroid - source_centroid
-            click.echo(f"  Wstępne przesunięcie: {trans_init[:3, 3]}")
-        except Exception as e:
-            click.echo(click.style(f"Nie można obliczyć centroidów, używanie macierzy jednostkowej: {e}", fg='yellow'))
-            trans_init = np.identity(4)
-    else:
-        click.echo("Używanie macierzy jednostkowej jako wstępnej transformacji.")
-        trans_init = np.identity(4)
 
     click.echo(f"\nRozpoczynanie rejestracji ICP metodą: {method}")
     click.echo(f"Próg: {threshold}, Maks. iteracji: {max_iterations}")
@@ -206,7 +195,7 @@ def main(source_file, target_file, output_transform, output_info, output_cloud, 
                  click.echo(click.style(f"Macierz informacji nie została obliczona, nie można zapisać do {output_info}.", fg='yellow'))
 
         if output_cloud:
-            click.echo(f"Transformowanie i zapisywanie chmury źródłowej do: {output_cloud}")
+            click.echo(f"Transformacja i zapisywanie chmury źródłowej do: {output_cloud}")
             try:
                 # Create a copy of the *original* source cloud and apply the *final* transformation for saving
                 chmura_source_copy_to_save = o3d.geometry.PointCloud(chmura_source) # Make a copy from potentially modified source
@@ -214,9 +203,6 @@ def main(source_file, target_file, output_transform, output_info, output_cloud, 
                 o3d.io.write_point_cloud(output_cloud, chmura_source_transformed)
             except Exception as e:
                 click.echo(click.style(f"Nie można zapisać przetransformowanej chmury punktów do {output_cloud}: {e}", fg='red'))
-        else:
-            click.echo("Pomijanie zapisywania przetransformowanej chmury źródłowej (nie podano --output-cloud).")
-
         click.echo(click.style("\nRejestracja zakończona pomyślnie.", fg='green'))
         return 0
     else:

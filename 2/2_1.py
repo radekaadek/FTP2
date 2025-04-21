@@ -1,7 +1,6 @@
 import laspy
 import open3d as o3d
 import numpy as np
-import os
 import click
 from pathlib import Path
 
@@ -94,12 +93,12 @@ def usuwanie_co_n_tego_punktu_z_chmury_punktow(chmura_punktow: o3d.geometry.Poin
 @click.option('--output-basename', type=str, default='combined',
               help='Podstawowa nazwa dla plików wyjściowych (domyślnie: combined).')
 @click.option('--remove-outliers', is_flag=True, help='Włącz usuwanie punktów odstających z połączonej chmury.')
-@click.option('--outlier-neighbors', type=int, default=30, help='Liczba sąsiadów dla usuwania odstających.')
-@click.option('--outlier-std-ratio', type=float, default=2.0, help='Współczynnik odch. std. dla usuwania odstających.')
+@click.option('--outlier-neighbors', type=click.INT, default=30, help='Liczba sąsiadów dla usuwania odstających.')
+@click.option('--outlier-std-ratio', type=click.FLOAT, default=2.0, help='Współczynnik odch. std. dla usuwania odstających.')
 @click.option('--uniform-downsample', is_flag=True, help='Włącz jednolity downsampling (co n-ty punkt) połączonej chmury.')
-@click.option('--uniform-k', type=int, default=2, help='Zachowaj co k-ty punkt podczas jednolitego downsamplingu.')
+@click.option('--uniform-k', type=click.INT, default=2, help='Zachowaj co k-ty punkt podczas jednolitego downsamplingu.')
 @click.option('--voxel-downsample', is_flag=True, help='Włącz downsampling wokselowy połączonej chmury.')
-@click.option('--voxel-size', type=float, default=0.1, help='Rozmiar woksela dla downsamplingu.')
+@click.option('--voxel-size', type=click.FLOAT, default=0.1, help='Rozmiar woksela dla downsamplingu.')
 @click.option('--save-outliers', is_flag=True, help='Zapisz punkty odstające (z połączonej chmury) do osobnego pliku.')
 @click.option('--save-voxels', is_flag=True, help='Zapisz zwokselizowaną połączoną chmurę do osobnego pliku.')
 @click.option('--output-format', type=click.Choice(['pcd', 'ply']), default='pcd', help='Format zapisu plików wyjściowych.')

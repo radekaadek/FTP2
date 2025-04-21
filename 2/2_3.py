@@ -1,7 +1,6 @@
 import click
 import open3d as o3d
 import numpy as np
-import os
 
 @click.command()
 @click.argument(
@@ -10,14 +9,14 @@ import os
 )
 @click.option(
     '--normal-radius',
-    type=float,
+    type=click.FLOAT,
     default=0.1,
     show_default=True,
     help='Radius for KDTree search during normal estimation.'
 )
 @click.option(
     '--normal-max-nn',
-    type=int,
+    type=click.INT,
     default=30,
     show_default=True,
     help='Maximum neighbors for KDTree search during normal estimation.'
@@ -30,7 +29,7 @@ import os
 )
 @click.option(
     '--poisson-depth',
-    type=int,
+    type=click.INT,
     default=9,
     show_default=True,
     help='Depth parameter for Poisson reconstruction.'
