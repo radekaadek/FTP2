@@ -83,7 +83,7 @@ def icp_registration(source, target, threshold, trans_init, method, max_iteratio
         click.echo(click.style(f"Nieznana metoda ICP: {method}", fg='red'))
         return None, None
 
-    transformation_matrix = reg_result.transformation
+    transformation_matrix = reg_result.transformation.copy()
     transformation_matrix[:3, 3] += target_translation
 
     if reg_result:
