@@ -69,7 +69,7 @@ def icp_registration(source, target, threshold, trans_init, method, max_iteratio
             click.echo(click.style("Ostrzeżenie: Chmura docelowa nie ma kolorów dla C-ICP.", fg='yellow'))
             # target.paint_uniform_color([0.5, 0.5, 0.5])
         if not target.has_normals():
-             click.echo(click.style("Ostrzeżenie: Chmura docelowa nie ma normalów dla C-ICP. Wyznaczanie wektorów normalnych...", fg='yellow'))
+             click.echo(click.style("Ostrzeżenie: Chmura docelowa nie ma wektorów normalnych dla C-ICP. Wyznaczanie wektorów normalnych...", fg='yellow'))
              target.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=threshold * 2, max_nn=30))
 
         try:
