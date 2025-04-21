@@ -173,3 +173,6 @@ cython_debug/
 *.pcd
 *.laz
 *.las
+*.e57
+*.JPG
+*.pdf
