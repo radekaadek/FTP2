@@ -22,65 +22,48 @@ import numpy as np
     help='Maximum neighbors for KDTree search during normal estimation.'
 )
 @click.option(
-    '--poisson',
-    is_flag=True,
-    default=False,
-    help='Perform Poisson surface reconstruction.'
-)
-@click.option(
     '--poisson-depth',
     type=click.INT,
     default=9,
     show_default=True,
-    help='Depth parameter for Poisson reconstruction.'
+    help='Depth parameter for Poisson reconstruction (used only if --poisson-output is set).'
 )
 @click.option(
     '--crop/--no-crop',
     default=True,
     show_default=True,
-    help='Crop the Poisson mesh to the bounding box of the input cloud.'
+    help='Crop the Poisson mesh to the bounding box of the input cloud (used only if --poisson-output is set).'
 )
 @click.option(
     '--poisson-output',
     type=click.Path(dir_okay=False, writable=True),
     default=None,
-    help='Save the resulting Poisson mesh to this file path (e.g., poisson_mesh.ply).'
-)
-@click.option(
-    '--ball-pivoting',
-    is_flag=True,
-    default=False,
-    help='Perform Ball Pivoting surface reconstruction.'
+    help='If specified, perform Poisson reconstruction and save the resulting mesh to this file path (e.g., poisson_mesh.ply).'
 )
 @click.option(
     '--ball-pivoting-output',
     type=click.Path(dir_okay=False, writable=True),
     default=None,
-    help='Save the resulting Ball Pivoting mesh to this file path (e.g., bp_mesh.stl).'
-)
-@click.option(
-    '--visualize/--no-visualize',
-    default=True,
-    show_default=True,
-    help='Visualize the generated mesh(es) in an Open3D window.'
+    help='If specified, perform Ball Pivoting reconstruction and save the resulting mesh to this file path (e.g., bp_mesh.stl).'
 )
 def process_cloud(input_pcd, normal_radius, normal_max_nn,
-                   poisson, poisson_depth, crop, poisson_output,
-                   ball_pivoting, ball_pivoting_output,
-                   visualize):
+                  poisson_depth, crop, poisson_output,
+                  ball_pivoting_output):
     """
     Processes a point cloud file (INPUT_PCD) using Open3D.
 
     Estimates normals and optionally reconstructs the surface using
-    Poisson Surface Reconstruction and/or Ball Pivoting algorithms.
-    The resulting meshes can be visualized and/or saved to files.
+    Poisson Surface Reconstruction and/or Ball Pivoting algorithms,
+    saving the results if output paths are provided.
     """
-    bp_radii_mult = [1.5, 2.0, 2.5, 3.0]
+    bp_radii_mult = [1.5, 2.0, 2.5, 3.0] # Multipliers for average distance
 
-    if not poisson and not ball_pivoting and not poisson_output and not ball_pivoting_output:
-        click.echo("Warning: Neither Poisson (--poisson) nor Ball Pivoting (--ball-pivoting) "
-                   "reconstruction requested, and no output files specified. "
-                   "The script will only load the cloud and estimate normals.", err=True)
+    if not poisson_output and not ball_pivoting_output:
+        click.echo("Error: No output file specified for Poisson (--poisson-output) "
+                   "or Ball Pivoting (--ball-pivoting-output). "
+                   "The script will only load the cloud and estimate normals. "
+                   "Provide an output path to run reconstruction.", err=True)
+        return 1
 
     click.echo(f"Loading point cloud from: {input_pcd}")
     try:
@@ -103,84 +86,72 @@ def process_cloud(input_pcd, normal_radius, normal_max_nn,
     if not cloud.has_normals():
          click.echo("Warning: Normals could not be estimated successfully. Reconstruction might fail or produce poor results.", err=True)
 
-    geometries_to_visualize = []
-    poisson_mesh_result = None
-    ball_pivoting_mesh_result = None
+    if poisson_output:
+        if not cloud.has_normals():
+             click.echo("Skipping Poisson reconstruction: Input cloud has no normals.", err=True)
+        else:
+            click.echo(f"Performing Poisson reconstruction (depth={poisson_depth})...")
+            try:
+                poisson_mesh_result, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(cloud, depth=poisson_depth)
+                if not poisson_mesh_result or not poisson_mesh_result.has_triangles():
+                    click.echo("Warning: Poisson reconstruction resulted in an empty or invalid mesh. No file saved.", err=True)
+                else:
+                    click.echo("Poisson reconstruction successful.")
+                    if crop:
+                        click.echo("Cropping Poisson mesh to input cloud bounds...")
+                        bbox = cloud.get_axis_aligned_bounding_box()
+                        poisson_mesh_result_cropped = poisson_mesh_result.crop(bbox)
+                        if not poisson_mesh_result_cropped.has_triangles():
+                             click.echo("Warning: Cropping removed all triangles from the Poisson mesh. Saving original.", err=True)
+                        else:
+                             poisson_mesh_result = poisson_mesh_result_cropped
+                             click.echo("Cropping complete.")
 
-    if poisson or poisson_output:
-        click.echo(f"Performing Poisson reconstruction (depth={poisson_depth})...")
-        try:
-            poisson_mesh_result, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(cloud, depth=poisson_depth)
-            if not poisson_mesh_result or not poisson_mesh_result.has_triangles():
-                 click.echo("Warning: Poisson reconstruction resulted in an empty or invalid mesh.", err=True)
-                 poisson_mesh_result = None
-            else:
-                click.echo("Poisson reconstruction successful.")
-                if crop:
-                    click.echo("Cropping Poisson mesh to input cloud bounds...")
-                    bbox = cloud.get_axis_aligned_bounding_box()
-                    poisson_mesh_result = poisson_mesh_result.crop(bbox)
-                    click.echo("Cropping complete.")
 
-                if poisson_output:
                     click.echo(f"Saving Poisson mesh to: {poisson_output}")
                     if not o3d.io.write_triangle_mesh(poisson_output, poisson_mesh_result, write_ascii=False, compressed=True):
-                         click.echo(f"Error: Failed to save Poisson mesh to {poisson_output}", err=True)
+                        click.echo(f"Error: Failed to save Poisson mesh to {poisson_output}", err=True)
                     else:
-                         click.echo("Poisson mesh saved.")
+                        click.echo("Poisson mesh saved.")
 
-                if visualize and poisson_mesh_result:
-                     geometries_to_visualize.append(poisson_mesh_result)
+            except Exception as e:
+                click.echo(f"Error during Poisson reconstruction: {e}", err=True)
 
-        except Exception as e:
-            click.echo(f"Error during Poisson reconstruction: {e}", err=True)
-            poisson_mesh_result = None
-
-    if ball_pivoting or ball_pivoting_output:
-        click.echo("Calculating average point distance for Ball Pivoting...")
-        try:
-            dists = cloud.compute_nearest_neighbor_distance()
-            avg_dist = np.mean(dists)
-            click.echo(f"Average distance between points: {avg_dist:.4f}")
-
-            radii_values = [avg_dist * m for m in bp_radii_mult]
-            if not radii_values:
-                click.echo("Error: No radii specified or calculated for Ball Pivoting.", err=True)
-            else:
-                click.echo(f"Using Ball Pivoting radii: {radii_values}")
-                ball_pivoting_mesh_result = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
-                    cloud,
-                    o3d.utility.DoubleVector(radii_values)
-                )
-
-                if not ball_pivoting_mesh_result or not ball_pivoting_mesh_result.has_triangles():
-                     click.echo("Warning: Ball Pivoting reconstruction resulted in an empty or invalid mesh.", err=True)
-                     ball_pivoting_mesh_result = None
+    if ball_pivoting_output:
+        if not cloud.has_normals():
+             click.echo("Skipping Ball Pivoting reconstruction: Input cloud has no normals.", err=True)
+        else:
+            click.echo("Calculating average point distance for Ball Pivoting...")
+            try:
+                dists = cloud.compute_nearest_neighbor_distance()
+                avg_dist = np.mean(dists)
+                if avg_dist <= 0:
+                     click.echo("Error: Could not compute valid average point distance for Ball Pivoting.", err=True)
                 else:
-                    click.echo("Ball Pivoting reconstruction successful.")
+                    click.echo(f"Average distance between points: {avg_dist:.4f}")
 
-                    if ball_pivoting_output:
-                        click.echo(f"Saving Ball Pivoting mesh to: {ball_pivoting_output}")
-                        if not o3d.io.write_triangle_mesh(ball_pivoting_output, ball_pivoting_mesh_result, write_ascii=False, compressed=True):
-                             click.echo(f"Error: Failed to save Ball Pivoting mesh to {ball_pivoting_output}", err=True)
+                    radii_values = [avg_dist * m for m in bp_radii_mult]
+                    if not radii_values:
+                        click.echo("Error: No radii specified or calculated for Ball Pivoting.", err=True)
+                    else:
+                        click.echo(f"Using Ball Pivoting radii: {radii_values}")
+                        ball_pivoting_mesh_result = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
+                            cloud,
+                            o3d.utility.DoubleVector(radii_values)
+                        )
+
+                        if not ball_pivoting_mesh_result or not ball_pivoting_mesh_result.has_triangles():
+                            click.echo("Warning: Ball Pivoting reconstruction resulted in an empty or invalid mesh. No file saved.", err=True)
                         else:
-                             click.echo("Ball Pivoting mesh saved.")
+                            click.echo("Ball Pivoting reconstruction successful.")
+                            click.echo(f"Saving Ball Pivoting mesh to: {ball_pivoting_output}")
+                            if not o3d.io.write_triangle_mesh(ball_pivoting_output, ball_pivoting_mesh_result, write_ascii=False, compressed=True):
+                                click.echo(f"Error: Failed to save Ball Pivoting mesh to {ball_pivoting_output}", err=True)
+                            else:
+                                click.echo("Ball Pivoting mesh saved.")
 
-                    if visualize and ball_pivoting_mesh_result:
-                        geometries_to_visualize.append(ball_pivoting_mesh_result)
-
-        except Exception as e:
-            click.echo(f"Error during Ball Pivoting setup or reconstruction: {e}", err=True)
-            ball_pivoting_mesh_result = None
-
-    if visualize and geometries_to_visualize:
-        click.echo(f"Visualizing {len(geometries_to_visualize)} generated mesh(es)...")
-        try:
-            o3d.visualization.draw_geometries(geometries_to_visualize, window_name="Open3D Mesh Reconstruction")
-        except Exception as e:
-            click.echo(f"Error during visualization: {e}", err=True)
-    elif visualize:
-        click.echo("Visualization requested, but no valid meshes were generated or selected for visualization.")
+            except Exception as e:
+                click.echo(f"Error during Ball Pivoting setup or reconstruction: {e}", err=True)
 
     click.echo("Processing finished.")
     return 0
