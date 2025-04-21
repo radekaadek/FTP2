@@ -68,6 +68,9 @@ def icp_registration(source, target, threshold, trans_init, method, max_iteratio
         if not target.has_colors():
             click.echo(click.style("Ostrzeżenie: Chmura docelowa nie ma kolorów dla C-ICP.", fg='yellow'))
             # target.paint_uniform_color([0.5, 0.5, 0.5])
+        if not target.has_normals():
+             click.echo(click.style("Ostrzeżenie: Chmura docelowa nie ma normalów dla C-ICP. Wyznaczanie wektorów normalnych...", fg='yellow'))
+             target.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=threshold * 2, max_nn=30))
 
         try:
             reg_result = o3d.pipelines.registration.registration_icp(
@@ -114,12 +117,6 @@ def icp_registration(source, target, threshold, trans_init, method, max_iteratio
 @click.command()
 @click.argument('source_file', type=click.Path(exists=True, dir_okay=False, readable=True))
 @click.argument('target_file', type=click.Path(exists=True, dir_okay=False, readable=True))
-@click.option('--output-transform', '-ot', default=None,
-              type=click.Path(dir_okay=False, writable=True),
-              help='Output file for the final transformation matrix (e.g., transform.txt).')
-@click.option('--output-info', '-oi', default=None,
-              type=click.Path(dir_okay=False, writable=True),
-              help='Output file for the information matrix (e.g., info.txt).')
 @click.option('--output-cloud', '-oc', default=None,
               type=click.Path(dir_okay=False, writable=True),
               help='Output file for the transformed source point cloud (e.g., transformed.pcd).')
@@ -130,7 +127,7 @@ def icp_registration(source, target, threshold, trans_init, method, max_iteratio
               help='ICP correspondence distance threshold.')
 @click.option('--max-iterations', '-i', default=1000, type=click.INT,
               help='Maximum number of ICP iterations.')
-def main(source_file, target_file, output_transform, output_info, output_cloud, method, threshold, max_iterations):
+def main(source_file, target_file, output_cloud, method, threshold, max_iterations):
     """
     Rejestruje chmurę punktów SOURCE_FILE do TARGET_FILE za pomocą algorytmu ICP.
 
@@ -172,28 +169,6 @@ def main(source_file, target_file, output_transform, output_info, output_cloud, 
     )
 
     if transformation is not None:
-        if output_transform:
-            click.echo(f"\nZapisywanie macierzy transformacji do: {output_transform}")
-            try:
-                np.savetxt(output_transform, transformation, fmt='%.8f')
-            except Exception as e:
-                click.echo(click.style(f"Nie można zapisać macierzy transformacji do {output_transform}: {e}", fg='red'))
-        else:
-            click.echo("\nPomijanie zapisywania macierzy transformacji (nie podano --output-transform).")
-
-        if information is not None:
-            if output_info:
-                click.echo(f"Zapisywanie macierzy informacji do: {output_info}")
-                try:
-                    np.savetxt(output_info, information, fmt='%.8f')
-                except Exception as e:
-                    click.echo(click.style(f"Nie można zapisać macierzy informacji do {output_info}: {e}", fg='red'))
-            else:
-                 click.echo("Pomijanie zapisywania macierzy informacji (nie podano --output-info).")
-        else:
-             if output_info:
-                 click.echo(click.style(f"Macierz informacji nie została obliczona, nie można zapisać do {output_info}.", fg='yellow'))
-
         if output_cloud:
             click.echo(f"Transformacja i zapisywanie chmury źródłowej do: {output_cloud}")
             try:
